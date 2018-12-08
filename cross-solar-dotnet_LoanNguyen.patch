@@ -1,0 +1,330 @@
+From 795242e0937539162765b12113df9f254a952fcb Mon Sep 17 00:00:00 2001
+From: gracenlov <gracenlov2012@gmail.com>
+Date: Sat, 8 Dec 2018 01:28:33 -0800
+Subject: [PATCH] my submission
+XOV:v2
+
+---
+ .../Controller/AnalyticsControllerTests.cs    | 143 ++++++++++++++++++
+ .../Controller/PanelControllerTests.cs        |   2 +
+ CrossSolar.Tests/CrossSolar.Tests.csproj      |   1 +
+ CrossSolar.Tests/coverage.bat                 |   4 +-
+ CrossSolar/Controllers/AnalyticsController.cs |  26 +++-
+ CrossSolar/Models/PanelModel.cs               |   9 +-
+ CrossSolar/Repository/AnalyticsRepository.cs  |   4 +
+ CrossSolar/appsettings.Development.json       |   2 +-
+ CrossSolar/appsettings.json                   |   2 +-
+ Readme.txt                                    |   5 +-
+ 10 files changed, 190 insertions(+), 8 deletions(-)
+ create mode 100644 CrossSolar.Tests/Controller/AnalyticsControllerTests.cs
+
+diff --git a/CrossSolar.Tests/Controller/AnalyticsControllerTests.cs b/CrossSolar.Tests/Controller/AnalyticsControllerTests.cs
+new file mode 100644
+index 0000000..ef1d900
+--- /dev/null
++++ b/CrossSolar.Tests/Controller/AnalyticsControllerTests.cs
+@@ -0,0 +1,143 @@
++using System.Collections.Generic;
++using System.Linq;
++using System.Threading.Tasks;
++using CrossSolar.Controllers;
++using CrossSolar.Domain;
++using CrossSolar.Models;
++using CrossSolar.Repository;
++using Microsoft.AspNetCore.Mvc;
++using MockQueryable.Moq;
++using Moq;
++using Xunit;
++
++namespace CrossSolar.Tests.Controller
++{
++    public class AnalyticsControllerTests
++    {
++      
++        private readonly AnalyticsController _analyticController;
++
++        private readonly Mock<IPanelRepository> _panelRepositoryMock = new Mock<IPanelRepository>();
++        private readonly Mock<IAnalyticsRepository> _analyticsRepositoryMock = new Mock<IAnalyticsRepository>();
++
++        private const string panelId = "AAAA1111BBBB2222";
++
++        public AnalyticsControllerTests()
++        {
++            _analyticController = new AnalyticsController(
++                                        _analyticsRepositoryMock.Object, 
++                                        _panelRepositoryMock.Object);
++
++            var mockPanels = new List<Panel>()
++            {
++                new Panel
++                {
++                    Brand = "Areva",
++                    Latitude = 12.345678,
++                    Longitude = 98.765543,
++                    Serial = panelId
++                }
++            }.AsQueryable().BuildMock();
++
++            _panelRepositoryMock.Setup(m => m.Query()).Returns(mockPanels.Object);
++
++            var mockAnalyticsData = new List<OneHourElectricity>()
++                    {
++                        new OneHourElectricity{
++                            PanelId=panelId,
++                            DateTime=new System.DateTime(2018,12,08,11,0,0),
++                            KiloWatt=9
++                        },
++                        new OneHourElectricity{
++                            PanelId=panelId,
++                            DateTime=new System.DateTime(2018,12,08,7,0,0),
++                            KiloWatt=455
++                        },
++                        new OneHourElectricity{
++                            PanelId=panelId,
++                            DateTime=new System.DateTime(2018,12,08,9,0,0),
++                            KiloWatt=34
++
++                        },
++                        new OneHourElectricity{
++                            PanelId=panelId,
++                            DateTime=new System.DateTime(2018,12,08,2,0,0),
++                            KiloWatt=7000
++                        }
++                    }.AsQueryable().BuildMock();
++            _analyticsRepositoryMock.Setup(m => m.Query()).Returns(mockAnalyticsData.Object);
++
++        }
++
++
++        [Fact]
++        public async Task Post_ShouldInsertOneHourElectricityAnalytic()
++        {
++          
++            //arrange
++            var oneHrElectricityObj = new OneHourElectricityModel();
++            oneHrElectricityObj.DateTime = System.DateTime.Now;
++            oneHrElectricityObj.KiloWatt = 500;
++
++
++            // Act
++            var result = await _analyticController.Post(panelId,oneHrElectricityObj);
++
++            // Assert
++            Assert.NotNull(result);
++
++            var createdResult = result as CreatedResult;
++            Assert.NotNull(createdResult);
++            Assert.Equal(201, createdResult.StatusCode);
++        }
++
++        [Fact]
++        public async Task DayResult_GetListOfDayElectricityModel()
++        {
++            //Act
++            var result = await _analyticController.DayResults(panelId);
++
++            //Assert
++            Assert.NotNull(result);
++            var okResult = result as OkObjectResult;
++            Assert.NotNull(okResult);
++            Assert.Equal(200, okResult.StatusCode);
++
++            var modelList = okResult.Value as IEnumerable<OneDayElectricityModel>;
++            Assert.NotNull(modelList);
++
++            var model = modelList.FirstOrDefault();
++            Assert.Equal(2018, model.DateTime.Year);
++            Assert.Equal(12, model.DateTime.Month);
++            Assert.Equal(8, model.DateTime.Day);
++            Assert.Equal(9, model.Minimum);
++            Assert.Equal(7000, model.Maximum);
++            Assert.Equal(1874.5, model.Average);
++            Assert.Equal(7498, model.Sum);
++
++        }
++
++        [Fact]
++        public async Task Get_GetListOfHourElectricityModel()
++        {
++           
++            // Act
++            var result = await _analyticController.Get(panelId);
++
++            // Assert
++            Assert.NotNull(result);
++
++            var okResult = result as OkObjectResult;
++            Assert.NotNull(okResult);
++            Assert.Equal(200, okResult.StatusCode);
++
++            var model = okResult.Value as OneHourElectricityListModel;
++            Assert.NotNull(model);
++            Assert.NotNull(model.OneHourElectricitys);
++            Assert.Equal(4,model.OneHourElectricitys.Count());
++
++
++        }
++
++    }
++}
+\ No newline at end of file
+diff --git a/CrossSolar.Tests/Controller/PanelControllerTests.cs b/CrossSolar.Tests/Controller/PanelControllerTests.cs
+index faa277e..92c6c32 100644
+--- a/CrossSolar.Tests/Controller/PanelControllerTests.cs
++++ b/CrossSolar.Tests/Controller/PanelControllerTests.cs
+@@ -42,5 +42,7 @@ namespace CrossSolar.Tests.Controller
+             Assert.NotNull(createdResult);
+             Assert.Equal(201, createdResult.StatusCode);
+         }
++
++       
+     }
+ }
+\ No newline at end of file
+diff --git a/CrossSolar.Tests/CrossSolar.Tests.csproj b/CrossSolar.Tests/CrossSolar.Tests.csproj
+index 3801997..5d10bc9 100644
+--- a/CrossSolar.Tests/CrossSolar.Tests.csproj
++++ b/CrossSolar.Tests/CrossSolar.Tests.csproj
+@@ -9,6 +9,7 @@
+   <ItemGroup>
+     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.6.0" />
+ 	<DotNetCliToolReference Include="MiniCover" Version="2.0.0-ci-20180304114938" />
++	<PackageReference Include="MockQueryable.Moq" Version="1.0.3" />
+     <PackageReference Include="moq" Version="4.8.2" />
+     <PackageReference Include="xunit" Version="2.3.1" />
+     <PackageReference Include="xunit.runner.visualstudio" Version="2.3.1" />
+diff --git a/CrossSolar.Tests/coverage.bat b/CrossSolar.Tests/coverage.bat
+index 55cc95a..71bad0d 100644
+--- a/CrossSolar.Tests/coverage.bat
++++ b/CrossSolar.Tests/coverage.bat
+@@ -8,4 +8,6 @@ dotnet minicover reset --workdir ../
+ 
+ dotnet test --no-build
+ dotnet minicover uninstrument --workdir ../
+-dotnet minicover report --workdir ../ --threshold 70
+\ No newline at end of file
++dotnet minicover report --workdir ../ --threshold 70
++
++pause
+\ No newline at end of file
+diff --git a/CrossSolar/Controllers/AnalyticsController.cs b/CrossSolar/Controllers/AnalyticsController.cs
+index d2217d7..b383871 100644
+--- a/CrossSolar/Controllers/AnalyticsController.cs
++++ b/CrossSolar/Controllers/AnalyticsController.cs
+@@ -24,7 +24,7 @@ namespace CrossSolar.Controllers
+         }
+ 
+         // GET panel/XXXX1111YYYY2222/analytics
+-        [HttpGet("{banelId}/[controller]")]
++        [HttpGet("{panelId}/[controller]")]
+         public async Task<IActionResult> Get([FromRoute] string panelId)
+         {
+             var panel = await _panelRepository.Query()
+@@ -52,7 +52,29 @@ namespace CrossSolar.Controllers
+         [HttpGet("{panelId}/[controller]/day")]
+         public async Task<IActionResult> DayResults([FromRoute] string panelId)
+         {
+-            var result = new List<OneDayElectricityModel>();
++            //check panel exists
++            if (!_panelRepository.Query().Any(x =>x.Serial.Equals(panelId, StringComparison.CurrentCultureIgnoreCase)))
++                return NotFound();
++
++            var result = await _analyticsRepository.Query()
++                .Where(x => x.PanelId.Equals(panelId, StringComparison.CurrentCultureIgnoreCase)).Select(
++                    x => new
++                    {
++                        Id=x.Id,
++                        DateTime = new DateTime(x.DateTime.Year, x.DateTime.Month, x.DateTime.Day, 0, 0, 0),
++                        KiloWatt = x.KiloWatt,
++                        PanelID=x.PanelId
++
++                    }).GroupBy(p => p.DateTime).Select(
++                        d => new OneDayElectricityModel()
++                        {
++                            Average = d.Average(a => a.KiloWatt),
++                            DateTime = d.Key,
++                            Minimum = d.Min(m => m.KiloWatt),
++                            Sum = d.Sum(s => s.KiloWatt),
++                            Maximum = d.Max(m => m.KiloWatt)
++                        }
++                    ).OrderBy(o => o.DateTime).ToListAsync();
+ 
+             return Ok(result);
+         }
+diff --git a/CrossSolar/Models/PanelModel.cs b/CrossSolar/Models/PanelModel.cs
+index 5e31cb5..1624700 100644
+--- a/CrossSolar/Models/PanelModel.cs
++++ b/CrossSolar/Models/PanelModel.cs
+@@ -11,9 +11,14 @@ namespace CrossSolar.Models
+         [RegularExpression(@"^\d+(\.\d{6})$")]
+         public double Latitude { get; set; }
+ 
+-        [Range(-180, 180)] public double Longitude { get; set; }
++        [Required]
++        [Range(-180, 180)]
++        public double Longitude { get; set; }
+ 
+-        [Required] public string Serial { get; set; }
++        [Required]
++        [MaxLength(16)]
++        [MinLength(16)]
++        public string Serial { get; set; }
+ 
+         public string Brand { get; set; }
+     }
+diff --git a/CrossSolar/Repository/AnalyticsRepository.cs b/CrossSolar/Repository/AnalyticsRepository.cs
+index 7c3d2f0..311a4fa 100644
+--- a/CrossSolar/Repository/AnalyticsRepository.cs
++++ b/CrossSolar/Repository/AnalyticsRepository.cs
+@@ -1,4 +1,8 @@
+ using CrossSolar.Domain;
++using System.Collections.Generic;
++using System.Threading.Tasks;
++using System.Linq;
++using Microsoft.EntityFrameworkCore;
+ 
+ namespace CrossSolar.Repository
+ {
+diff --git a/CrossSolar/appsettings.Development.json b/CrossSolar/appsettings.Development.json
+index 7b346f0..da9a804 100644
+--- a/CrossSolar/appsettings.Development.json
++++ b/CrossSolar/appsettings.Development.json
+@@ -1,6 +1,6 @@
+ ﻿{
+   "ConnectionStrings": {
+-    "DefaultConnection": "Server=.\\SQLEXPRESS;Database=CrossSolarDb;Trusted_Connection=True;"
++    "DefaultConnection": "Server=DESKTOP-A8VLF8K\\SQLEXPRESS_K12;Database=CrossSolarDb;Trusted_Connection=True;User Id=sa; Password=G7;"
+   },
+   "Logging": {
+     "IncludeScopes": false,
+diff --git a/CrossSolar/appsettings.json b/CrossSolar/appsettings.json
+index 43e8e63..66dcd28 100644
+--- a/CrossSolar/appsettings.json
++++ b/CrossSolar/appsettings.json
+@@ -1,6 +1,6 @@
+ ﻿{
+   "ConnectionStrings": {
+-    "DefaultConnection": "Server=.\\SQLEXPRESS;Database=CrossSolarDb;Trusted_Connection=True;"
++    "DefaultConnection": "Server=DESKTOP-A8VLF8K\\SQLEXPRESS_K12;Database=CrossSolarDb;Trusted_Connection=True;User Id=sa; Password=G7;"
+   },
+   "Logging": {
+     "IncludeScopes": false,
+diff --git a/Readme.txt b/Readme.txt
+index 5152f9d..67bafae 100644
+--- a/Readme.txt
++++ b/Readme.txt
+@@ -8,7 +8,10 @@ Notes:
+ Tasks:
+ 	1)	Increase unit test coverage to reach 60%, achieving more than 60% will only consume your valuable time without extra score.
+ 	2)	Find bugs and fix them, hint: we provided Cross-Solar application in a good structure, so no need to spend your valuable time on structure modifications,  just focus on fixing bugs.
+-	3) 	Frontend team wants to display panel’s all historical data in a chart, in which each point represents electricity generated by this panel each day [sum, min, max, average] up to the end 		of previous day , your goal is to implement backend part of this task, API specifications already there in code as agreed with Frontend team, and it is ok to implement this task without 		any optimization.
++	3) 	Frontend team wants to display panel’s all historical data in a chart, in which each point represents electricity generated by this panel each day [sum, min, max, average] up to the end 
++		of previous day , your goal is to implement backend part of this task, API specifications already 
++		there in code as agreed with Frontend team, and it is ok to implement this task without 		
++		any optimization.
+ 
+ Prerequisites:
+ 	GIT
+-- 
+2.18.0.windows.1
+
